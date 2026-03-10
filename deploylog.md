@@ -3537,6 +3537,8 @@ cd /opt
 git clone https://github.com/fumaye1/mindmap-license-server.git
 cd mindmap-license-server
 
+更新仓库拉取后，要重启服务PM2
+
 # 安装依赖
 npm install
 
@@ -3744,6 +3746,78 @@ Invoke-RestMethod `
   -Headers @{ Authorization = "Bearer $token" } `
   -ContentType "application/json" `
   -Body $body
+```
+
+带有效期
+```bash
+$token = "J3kL9mN2bV6cX0zA2sD5fG7hJ9kL3pO5"
+$body = @{
+  maxVersion = "3.999.999"
+  seats      = 3
+  validDays  = 7
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://47.239.218.156/admin/create-key" `
+  -Headers @{ Authorization = "Bearer $token" } `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+批量创建
+```bash
+# ===== 配置区 =====
+$token = "J3kL9mN2bV6cX0zA2sD5fG7hJ9kL3pO5"
+$baseUrl = "http://47.239.218.156"
+$count = 20              # 要创建多少个
+$maxVersion = "3.999.999"
+$seats = 3
+$validDays = 7          # 有效期天数
+
+# ===== 批量创建 =====
+$results = for ($i = 1; $i -le $count; $i++) {
+  $body = @{
+    maxVersion = $maxVersion
+    seats      = $seats
+    validDays  = $validDays
+  } | ConvertTo-Json
+
+  try {
+    $resp = Invoke-RestMethod `
+      -Method Post `
+      -Uri "$baseUrl/admin/create-key" `
+      -Headers @{ Authorization = "Bearer $token" } `
+      -ContentType "application/json" `
+      -Body $body
+
+    [PSCustomObject]@{
+      index      = $i
+      key        = $resp.key
+      maxVersion = $resp.maxVersion
+      seats      = $resp.seats
+      expiresAt  = $resp.expiresAt
+      ok         = $true
+    }
+  } catch {
+    [PSCustomObject]@{
+      index      = $i
+      key        = $null
+      maxVersion = $maxVersion
+      seats      = $seats
+      expiresAt  = $null
+      ok         = $false
+      error      = $_.Exception.Message
+    }
+  }
+}
+
+# 控制台查看
+$results | Format-Table -AutoSize
+
+# 可选：导出到 CSV
+$results | Export-Csv -Path ".\activation-keys.csv" -NoTypeInformation -Encoding UTF8
+
 ```
 
 ### 查看所有激活码

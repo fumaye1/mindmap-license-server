@@ -59,7 +59,7 @@ export class LicenseService {
         key,
         maxVersion: params.maxVersion,
         seats,
-        expiresAt: activationKey.expiresAt ? new Date(activationKey.expiresAt).toISOString() : null,
+        expiresAt: expiresAtDate ? expiresAtDate.toISOString() : null,
       };
     } catch (error) {
       logger.error('Error creating activation key:', error);
