@@ -16,7 +16,7 @@ mindmap-license-server/
 │   │   ├── error.middleware.ts
 │   │   └── ratelimit.middleware.ts
 │   ├── models/              # 数据模型
-│   │   ├── activationKey.model.ts
+│   │   ├── activationkey.model.ts
 │   │   ├── device.model.ts
 │   │   └── license.model.ts
 │   ├── routes/              # 路由
@@ -58,10 +58,12 @@ mindmap-license-server/
 ├── package.json            # 项目配置
 ├── tsconfig.json           # TypeScript 配置
 ├── ecosystem.config.js     # PM2 配置
-├── README.md               # 项目说明
-├── aliyun_design.md        # 设计文档
-├── aliyun_deployment.md    # 部署指南
-├── hk_light_server_runbook.md # 香港轻量服务器 Runbook
+├── README.md               # 文档总入口（docs）
+├── aliyun_quickstart.md    # 最短部署路径
+├── aliyun_deployment.md    # 完整部署指南
+├── aliyun_design.md        # 架构设计文档
+├── debug_fix_runbook.md    # 故障排查与修复复盘
+├── deploylog.md            # 历史过程归档
 └── aliyun_structure.md     # 项目结构（本文件）
 ```
 
@@ -214,7 +216,6 @@ mindmap-license-server/
 - 更新系统
 - 安装必要软件
 - 配置防火墙
-- 初始化数据库
 
 ### deploy.sh
 部署脚本，执行以下操作：
@@ -257,6 +258,12 @@ Nginx 配置文件，包含：
 - 数据库配置
 - Redis 配置
 - 许可证配置
+
+## 文档阅读建议
+
+- 快速上手优先看 `README.md` 与 `aliyun_quickstart.md`
+- 生产环境以 `aliyun_deployment.md` 为准
+- 故障与低内存卡顿优先看 `debug_fix_runbook.md`
 
 ### package.json
 项目配置文件，包含：

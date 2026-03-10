@@ -2,6 +2,10 @@
 
 本指南将帮助你将 mindmap-license-server 部署到阿里云轻量服务器。
 
+> 文档定位：本文件是“完整部署主文档”。
+> - 最短步骤请看：`aliyun_quickstart.md`
+> - 常见故障请看：`debug_fix_runbook.md`
+
 ## 前置要求
 
 - 阿里云账户
@@ -119,8 +123,8 @@ systemctl enable redis-server
 ### 3.1 克隆代码
 
 ```bash
-cd /var/www
-git clone https://github.com/your-username/mindmap-license-server.git
+cd /opt
+git clone https://github.com/fumaye1/mindmap-license-server.git
 cd mindmap-license-server
 ```
 
@@ -151,7 +155,7 @@ TRUST_PROXY=1
 CORS_ORIGINS=app://obsidian.md
 
 # 数据库配置
-DB_HOST=localhost
+DB_HOST=127.0.0.1
 DB_PORT=3306
 DB_NAME=mindmap_license
 DB_USER=license_user
