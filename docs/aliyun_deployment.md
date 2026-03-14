@@ -379,12 +379,125 @@ curl https://your-domain.com/health
 
 ### 8.2 测试创建激活密钥
 
+先准备管理员令牌（`ADMIN_TOKEN`）：
+
+- 服务器端建议先导出环境变量，避免反复手输：`export ADMIN_TOKEN='<YOUR_ADMIN_TOKEN>'`
+- 本机 PowerShell 建议：`$token = '<YOUR_ADMIN_TOKEN>'`
+
+#### 8.2.1 服务器端创建（curl）
+
+创建永久激活码（默认不设置有效期）：
+
 ```bash
 curl -X POST https://your-domain.com/admin/create-key \
-  -H "Authorization: Bearer your-admin-token" \
+    -H "Authorization: Bearer <YOUR_ADMIN_TOKEN>" \
   -H "Content-Type: application/json" \
-    -d '{"maxVersion":"0.2.999"}'
+    -d '{"maxVersion":"0.2.999","seats":3}'
 ```
+
+创建带有效期激活码（例如 7 天）：
+
+```bash
+curl -X POST https://your-domain.com/admin/create-key \
+    -H "Authorization: Bearer <YOUR_ADMIN_TOKEN>" \
+    -H "Content-Type: application/json" \
+    -d '{"maxVersion":"0.2.999","seats":3,"validDays":7}'
+```
+
+创建“永不过期”激活码（与 `validDays` 二选一，不能同时传）：
+
+```bash
+curl -X POST https://your-domain.com/admin/create-key \
+    -H "Authorization: Bearer <YOUR_ADMIN_TOKEN>" \
+    -H "Content-Type: application/json" \
+    -d '{"maxVersion":"0.2.999","seats":3,"neverExpires":true}'
+```
+
+#### 8.2.2 本机创建（Windows PowerShell）
+
+```powershell
+$token = "<YOUR_ADMIN_TOKEN>"
+$baseUrl = "https://your-domain.com"
+
+$body = @{
+    maxVersion = "0.2.999"
+    seats      = 3
+    validDays  = 7
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+    -Method Post `
+    -Uri "$baseUrl/admin/create-key" `
+    -Headers @{ Authorization = "Bearer $token" } `
+    -ContentType "application/json" `
+    -Body $body
+```
+
+#### 8.2.3 批量创建（服务器端 Bash）
+
+```bash
+ADMIN_TOKEN='<YOUR_ADMIN_TOKEN>'
+BASE_URL='https://your-domain.com'
+
+for i in $(seq 1 20); do
+    curl -s -X POST "$BASE_URL/admin/create-key" \
+        -H "Authorization: Bearer $ADMIN_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d '{"maxVersion":"0.2.999","seats":3,"validDays":7}'
+    echo
+done
+```
+
+#### 8.2.4 批量创建（本机 PowerShell）
+
+```powershell
+$token = "<YOUR_ADMIN_TOKEN>"
+$baseUrl = "https://your-domain.com"
+$count = 20
+
+$results = for ($i = 1; $i -le $count; $i++) {
+    $body = @{
+        maxVersion = "0.2.999"
+        seats      = 3
+        validDays  = 7
+    } | ConvertTo-Json
+
+    try {
+        $resp = Invoke-RestMethod `
+            -Method Post `
+            -Uri "$baseUrl/admin/create-key" `
+            -Headers @{ Authorization = "Bearer $token" } `
+            -ContentType "application/json" `
+            -Body $body
+
+        [PSCustomObject]@{
+            index     = $i
+            key       = $resp.key
+            expiresAt = $resp.expiresAt
+            ok        = $true
+        }
+    } catch {
+        [PSCustomObject]@{
+            index     = $i
+            key       = $null
+            expiresAt = $null
+            ok        = $false
+            error     = $_.Exception.Message
+        }
+    }
+}
+
+$results | Format-Table -AutoSize
+# 可选导出
+$results | Export-Csv -Path ".\\activation-keys.csv" -NoTypeInformation -Encoding UTF8
+```
+
+#### 8.2.5 常见错误与处理
+
+- `401 Unauthorized`：`ADMIN_TOKEN` 错误或请求头缺少 `Authorization: Bearer ...`。
+- `"validDays" is not allowed`：服务未更新到最新版本或命中旧进程，执行 `pm2 restart --update-env`。
+- `neverExpires=true cannot be used with validDays`：两个字段冲突，只保留一个。
+- `INVALID_REQUEST`：`maxVersion` 需满足 semver 格式（如 `0.2.999`）。
 
 ### 8.3 测试激活许可证
 
@@ -398,6 +511,63 @@ curl -X POST https://your-domain.com/activate \
     "appVersion": "1.0.0"
   }'
 ```
+
+### 8.4 用户插件端激活（详细步骤）
+
+#### 8.4.1 管理员侧准备
+
+1. 先通过 `8.2` 创建激活码。
+2. 确认服务健康：`GET /health` 返回 `200`。
+3. 准备好以下三项给用户：
+     - 服务器地址：`https://your-domain.com`
+     - 插件公钥：`LICENSE_PUBLIC_KEY_B64`
+     - 激活码：例如 `ABCD-EFGH-IJKL-MNOP`
+
+#### 8.4.2 用户插件侧配置
+
+在插件设置页填写：
+
+1. `License server base URL`：`https://your-domain.com`
+2. `License public key (base64)`：管理员提供的 `LICENSE_PUBLIC_KEY_B64`
+3. `Activation key`：管理员提供的激活码
+
+然后点击 `Activate`。
+
+#### 8.4.3 激活请求内容（插件 -> 服务器）
+
+插件会向 `/activate` 发送类似请求：
+
+```json
+{
+    "key": "ABCD-EFGH-IJKL-MNOP",
+    "deviceId": "your-device-id",
+    "deviceName": "Your Device",
+    "appVersion": "0.2.5"
+}
+```
+
+服务端成功响应：
+
+```json
+{
+    "payloadB64": "...",
+    "sigB64": "..."
+}
+```
+
+#### 8.4.4 用户可见成功标准
+
+- 插件界面显示“已激活”或等价状态；
+- 无 `INVALID_SIGNATURE` / `VERSION_NOT_ALLOWED` / `SEATS_EXCEEDED` 报错；
+- 刷新插件或重启 Obsidian 后仍保持已激活。
+
+#### 8.4.5 激活失败排查顺序（用户侧）
+
+1. 检查 URL 是否可达：浏览器访问 `https://your-domain.com/health`。
+2. 检查公钥是否完整粘贴（不要有换行和空格）。
+3. 检查激活码是否输错、是否已禁用、是否已超过座位数。
+4. 检查版本是否在授权范围内（`appVersion <= maxVersion`）。
+5. 管理员查看服务日志：`pm2 logs license-server`。
 
 ## 9. 维护和更新
 
