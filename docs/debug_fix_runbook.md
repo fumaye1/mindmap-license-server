@@ -155,6 +155,66 @@ ALTER TABLE activation_keys
 - 文件：`src/services/activation.service.ts`
 - 修改：在三个版本检查点添加详细的日志信息（激活密钥检查、许可证二次校验、刷新许可证检查）
 
+### 6.3 Sequelize 类字段遮蔽问题修复
+
+#### 问题现象
+- 日志中显示：`Version parsing failed!`
+- 调试日志显示：`Max version: undefined Parsed: null`
+- Sequelize 警告：`Warning: Model "ActivationKey" is declaring public class fields for attribute(s): "id", "key", "licenseId", "maxMajor", "maxVersion", "seats", "disabled", "expiresAt", "createdAt", "updatedAt". These class fields are shadowing Sequelize's attribute getters & setters.`
+
+#### 问题原因
+- 使用 `public` 关键字声明类字段会遮蔽 Sequelize 的属性 getter/setter
+- 导致从数据库查询的数据无法正确赋值给类字段
+- 特别是 `maxVersion` 字段读取为 `undefined`，导致版本检查失败
+
+#### 修复方案
+将所有模型文件中的类字段声明从 `public` 改为 `declare` 关键字：
+
+**修改的文件：**
+- `src/models/activationkey.model.ts`
+- `src/models/license.model.ts`
+- `src/models/device.model.ts`
+
+**修改示例：**
+```typescript
+// 修改前
+export class ActivationKey extends Model<ActivationKeyAttributes, ActivationKeyCreationAttributes>
+  implements ActivationKeyAttributes {
+  public id!: number;
+  public key!: string;
+  public maxVersion!: string;
+  // ...
+}
+
+// 修改后
+export class ActivationKey extends Model<ActivationKeyAttributes, ActivationKeyCreationAttributes>
+  implements ActivationKeyAttributes {
+  declare id: number;
+  declare key: string;
+  declare maxVersion: string;
+  // ...
+}
+```
+
+#### 验证修复
+```bash
+# 1. 重启服务
+pm2 restart mindmap-license-server
+
+# 2. 查看日志（使用不卡顿的命令）
+cat /root/.pm2/logs/mindmap-license-server-out.log | tail -50
+
+# 3. 测试激活
+curl -X POST http://127.0.0.1:3000/activate \
+  -H "Content-Type: application/json" \
+  -d '{"key":"B5EW-U48G-SU25-WDRL","deviceId":"2b8cf81f-78f1-441d-8dc5-72692cb8a65c","deviceName":"Test Device","appVersion":"0.2.5"}'
+```
+
+预期结果：
+- 日志中不再显示 `Version parsing failed!`
+- 日志中正确显示 `Max version: <version> Parsed: { major: ..., minor: ..., patch: ... }`
+- 激活请求成功返回许可证信息
+
 #### 版本检查问题排查流程
 
 当遇到 `VERSION_NOT_ALLOWED` 错误时：
@@ -367,3 +427,386 @@ mysql -h 127.0.0.1 -u license_user -p -e "SELECT 1;"
 
 - 修改/脱敏本地与仓库中的明文凭据；
 - 确认不再将真实凭据粘贴到 `README`、`deploylog`、工单、聊天记录中。
+
+---
+
+## 11. 服务器命令使用指南（命令卡顿问题）
+
+### 11.1 常用命令分类
+
+#### 进程管理命令（PM2）
+```bash
+# 查看进程状态
+pm2 status
+
+# 启动服务
+pm2 start "npx tsx src/app.ts" --name mindmap-license-server
+
+# 重启服务
+pm2 restart mindmap-license-server
+
+# 停止服务
+pm2 stop mindmap-license-server
+
+# 删除进程
+pm2 delete mindmap-license-server
+
+# 停止所有进程
+pm2 stop all
+
+# 删除所有进程
+pm2 delete all
+
+# 保存进程列表
+pm2 save
+```
+
+#### 日志查看命令
+```bash
+# 查看实时日志（容易卡顿）
+pm2 logs mindmap-license-server
+
+# 查看最近N行日志（容易卡顿）
+pm2 logs mindmap-license-server --lines 20
+
+# 查看日志但不实时跟踪（不卡顿）
+pm2 logs mindmap-license-server --lines 20 --nostream
+
+# 直接查看日志文件（推荐）
+cat /root/.pm2/logs/mindmap-license-server-error.log
+cat /root/.pm2/logs/mindmap-license-server-out.log
+
+# 查看日志最后N行（推荐）
+tail -20 /root/.pm2/logs/mindmap-license-server-error.log
+tail -20 /root/.pm2/logs/mindmap-license-server-out.log
+```
+
+#### Git 操作命令
+```bash
+# 拉取最新代码
+git pull
+
+# 查看状态
+git status
+
+# 查看提交历史
+git log --oneline -n 5
+```
+
+#### 测试命令
+```bash
+# 测试激活接口
+curl -X POST http://127.0.0.1:3000/activate \
+  -H "Content-Type: application/json" \
+  -d '{"key":"B5EW-U48G-SU25-WDRL","deviceId":"2b8cf81f-78f1-441d-8dc5-72692cb8a65c","deviceName":"Test Device","appVersion":"0.2.5"}'
+```
+
+### 11.2 容易卡顿的命令及原因
+
+#### 1. 容易卡顿的命令
+- `pm2 logs mindmap-license-server`（实时跟踪日志）
+- `pm2 logs mindmap-license-server --lines 20`（带实时跟踪）
+- `tail -f` 命令（实时跟踪文件）
+
+**原因**：
+- 这些命令会持续监听日志文件的变化
+- 当日志输出非常频繁时，终端可能无法及时处理
+- 网络连接不稳定时也可能导致卡顿
+
+#### 2. 不卡顿的命令（推荐使用）
+- `pm2 logs --nostream`（不实时跟踪）
+- `cat` 命令（一次性输出）
+- `tail -N`（不使用 -f 参数）
+- `pm2 status`（查看状态）
+- `pm2 restart/stop/delete`（进程操作）
+
+### 11.3 命令作用详解
+
+#### PM2 进程管理
+- **status**: 显示所有进程的运行状态（PID、内存、CPU等）
+- **start**: 启动新的进程
+- **restart**: 重启进程
+- **stop**: 停止进程
+- **delete**: 删除进程
+- **logs**: 查看进程日志
+
+#### 日志查看
+- **pm2 logs**: 实时查看PM2管理的进程日志
+- **cat**: 一次性显示文件全部内容
+- **tail**: 默认显示文件最后10行，配合 -N 参数显示最后N行
+
+#### Git 操作
+- **git pull**: 从远程仓库拉取最新代码
+- **git status**: 查看工作区状态
+- **git log**: 查看提交历史
+
+#### 测试命令
+- **curl**: 发送HTTP请求测试API接口
+
+### 11.4 最佳实践
+
+#### 1. 查看日志时
+- 优先使用 `cat` 或 `tail -N` 查看日志文件
+- 避免使用 `pm2 logs` 的实时跟踪模式
+- 如果必须使用 `pm2 logs`，加上 `--nostream` 参数
+
+#### 2. 进程管理时
+- 先用 `pm2 status` 查看状态
+- 使用 `pm2 restart` 重启服务
+- 如果需要完全重置，使用 `pm2 stop all` 和 `pm2 delete all`
+
+#### 3. 测试时
+- 使用 `curl` 测试API接口
+- 检查返回的状态码和响应内容
+
+#### 4. 遇到卡顿时
+- 按 `Ctrl + C` 退出当前命令
+- 使用不卡顿的替代命令
+- 如果终端完全无响应，可以关闭并重新打开终端
+
+### 11.5 当前问题排查建议
+
+当所有命令都卡住时，建议：
+
+#### 1. 关闭当前终端，重新连接服务器
+
+#### 2. 执行以下命令序列
+```bash
+# 1. 进入项目目录
+cd /opt/mindmap-license-server
+
+# 2. 查看进程状态
+pm2 status
+
+# 3. 查看日志文件（使用 cat）
+cat /root/.pm2/logs/mindmap-license-server-out.log | tail -50
+cat /root/.pm2/logs/mindmap-license-server-error.log | tail -50
+
+# 4. 测试激活接口
+curl -X POST http://127.0.0.1:3000/activate \
+  -H "Content-Type: application/json" \
+  -d '{"key":"B5EW-U48G-SU25-WDRL","deviceId":"2b8cf81f-78f1-441d-8dc5-72692cb8a65c","deviceName":"Test Device","appVersion":"0.2.5"}'
+```
+
+#### 3. 如果服务未正常运行，执行
+```bash
+# 停止并删除所有进程
+pm2 stop all
+pm2 delete all
+
+# 重新启动服务
+pm2 start "npx tsx src/app.ts" --name mindmap-license-server
+
+# 保存进程列表
+pm2 save
+
+# 查看状态
+pm2 status
+
+---
+
+
+## 12. 调试循环问题总结（重要经验）
+
+### 12.1 问题描述
+
+在调试版本检查问题时，出现了以下循环问题：
+
+1. **现象**：
+   - 日志显示 `Max version: undefined Parsed: null`
+   - 版本检查失败，返回 `VERSION_NOT_ALLOWED` 错误
+   - 调试过程中反复查看相同的文件，没有进展
+
+2. **根本原因**：
+   - Sequelize 模型类字段声明使用了 `public` 关键字
+   - 导致类字段遮蔽了 Sequelize 的属性 getter/setter
+   - 数据库查询的数据无法正确赋值给类字段
+   - 特别是 `maxVersion` 字段读取为 `undefined`
+
+3. **调试过程中的问题**：
+   - 没有及时查看 Sequelize 的警告信息
+   - 反复查看版本解析工具类，忽略了模型定义
+   - 没有从数据库层面验证数据是否正确读取
+
+### 12.2 解决方案
+
+#### 修复模型类字段声明
+
+将所有模型文件中的类字段声明从 `public` 改为 `declare` 关键字：
+
+**修改的文件：**
+- `src/models/activationkey.model.ts`
+- `src/models/license.model.ts`
+- `src/models/device.model.ts`
+
+**修改示例：**
+```typescript
+// 修改前
+export class ActivationKey extends Model<ActivationKeyAttributes, ActivationKeyCreationAttributes>
+  implements ActivationKeyAttributes {
+  public id!: number;
+  public key!: string;
+  public maxVersion!: string;
+  // ...
+}
+
+// 修改后
+export class ActivationKey extends Model<ActivationKeyAttributes, ActivationKeyCreationAttributes>
+  implements ActivationKeyAttributes {
+  declare id: number;
+  declare key: string;
+  declare maxVersion: string;
+  // ...
+}
+```
+
+### 12.3 调试经验总结
+
+#### 1. 避免调试循环的方法
+
+**问题现象**：
+- 反复查看相同的文件
+- 没有进展，陷入循环
+- 重复执行相同的命令
+
+**解决方法**：
+- **及时记录问题**：将遇到的现象、日志信息记录下来
+- **分析根本原因**：不要只看表面现象，要深入分析
+- **扩大排查范围**：不要只关注一个文件，要考虑整个调用链
+- **查看警告信息**：Sequelize 的警告信息很重要，不要忽略
+
+#### 2. 调试流程优化
+
+**正确的调试流程**：
+1. **收集信息**：
+   - 记录完整的错误信息
+   - 保存相关的日志输出
+   - 记录执行的操作序列
+
+2. **分析问题**：
+   - 从错误信息中提取关键信息
+   - 分析可能的原因
+   - 制定排查计划
+
+3. **逐步排查**：
+   - 从数据库层面验证数据
+   - 从代码层面验证逻辑
+   - 从日志层面验证执行路径
+
+4. **验证修复**：
+   - 确认修复是否有效
+   - 测试相关功能
+   - 更新文档
+
+#### 3. 常见调试陷阱
+
+**陷阱1：只看表面现象**
+- 现象：版本检查失败
+- 错误做法：只关注版本比较逻辑
+- 正确做法：查看数据来源、数据传递、数据使用整个链路
+
+**陷阱2：忽略警告信息**
+- 现象：Sequelize 警告类字段遮蔽
+- 错误做法：忽略警告，继续调试
+- 正确做法：重视警告，分析警告原因
+
+**陷阱3：反复执行相同操作**
+- 现象：反复查看版本解析工具类
+- 错误做法：重复执行相同的命令
+- 正确做法：记录问题，分析原因，扩大排查范围
+
+**陷阱4：没有记录调试过程**
+- 现象：调试过程中忘记之前做了什么
+- 错误做法：凭记忆继续调试
+- 正确做法：记录每一步操作和结果
+
+#### 4. 调试工具使用建议
+
+**日志查看**：
+- 使用 `grep` 过滤关键信息
+- 使用 `tail -N` 查看最新日志
+- 使用 `--nostream` 避免卡顿
+
+**数据库查询**：
+- 直接查询数据库验证数据
+- 检查表结构是否正确
+- 验证数据是否正确读取
+
+**代码分析**：
+- 从入口点开始追踪
+- 关注数据流向
+- 检查类型定义
+
+### 12.4 版本检查问题完整排查流程
+
+当遇到 `VERSION_NOT_ALLOWED` 错误时：
+
+1. **查看日志中的版本检查信息**：
+   ```bash
+   tail -n 100 logs/combined.log | grep "Version"
+   ```
+
+2. **检查数据库中的激活密钥版本配置**：
+   ```bash
+   mysql -u root -p -e "USE mindmap_license; SELECT id, \`key\`, max_major, max_version, seats, disabled FROM activation_keys LIMIT 5;"
+   ```
+
+3. **检查 Sequelize 警告信息**：
+   ```bash
+   tail -n 100 logs/combined.log | grep "Warning"
+   ```
+
+4. **验证模型定义**：
+   - 检查类字段声明是否使用 `declare` 关键字
+   - 检查字段类型是否正确
+   - 检查字段名是否与数据库列名一致
+
+5. **确认版本号格式**：
+   - 应用版本格式：`major.minor.patch`（如 `0.2.5`）
+   - 最大版本格式：`major.minor.patch`（如 `0.2.999`）
+   - 版本比较规则：`current <= max` 允许激活
+
+6. **常见问题**：
+   - 版本号格式不正确（如缺少 patch 版本）
+   - maxVersion 设置过小（如 `0.2.0` 而应用版本是 `0.2.5`）
+   - 版本解析失败（日志中会显示 `Version parsing failed!`）
+   - 模型类字段声明使用 `public` 关键字导致数据读取失败
+
+7. **解决方案**：
+   - 更新激活密钥的 maxVersion 值
+   - 确保应用版本号格式正确
+   - 检查版本比较逻辑是否正确
+   - 修改模型类字段声明为 `declare` 关键字
+
+### 12.5 快速验证修复
+
+```bash
+# 1. 重启服务
+pm2 restart mindmap-license-server
+
+# 2. 查看日志（使用不卡顿的命令）
+cat /root/.pm2/logs/mindmap-license-server-out.log | tail -50
+
+# 3. 测试激活
+curl -X POST http://127.0.0.1:3000/activate   -H "Content-Type: application/json"   -d '{"key":"B5EW-U48G-SU25-WDRL","deviceId":"2b8cf81f-78f1-441d-8dc5-72692cb8a65c","deviceName":"Test Device","appVersion":"0.2.5"}'
+```
+
+预期结果：
+- 日志中不再显示 `Version parsing failed!`
+- 日志中正确显示 `Max version: <version> Parsed: { major: ..., minor: ..., patch: ... }`
+- 激活请求成功返回许可证信息
+
+### 12.6 总结
+
+调试过程中要避免陷入循环，关键在于：
+
+1. **及时记录问题**：记录现象、日志、操作
+2. **分析根本原因**：不要只看表面现象
+3. **扩大排查范围**：考虑整个调用链
+4. **重视警告信息**：Sequelize 的警告很重要
+5. **验证修复效果**：确认修复是否有效
+6. **更新文档**：将调试经验记录下来
+
+通过以上方法，可以避免调试循环，提高调试效率。
+
+```
