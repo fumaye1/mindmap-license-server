@@ -32,7 +32,9 @@ export class ActivationService {
       }
 
       // 1.1 校验版本是否在授权范围内
+      logger.debug(`Checking version: appVersion=${request.appVersion}, maxVersion=${activationKey.maxVersion}, maxMajor=${activationKey.maxMajor}`);
       if (!isVersionAllowed({ current: request.appVersion, max: activationKey.maxVersion })) {
+        logger.error(`Version check failed: appVersion=${request.appVersion}, maxVersion=${activationKey.maxVersion}, maxMajor=${activationKey.maxMajor}`);
         throw new AppError('VERSION_NOT_ALLOWED', 'App version not allowed by this activation key', 403, {
           appVersion: request.appVersion,
           maxVersion: activationKey.maxVersion,
@@ -68,7 +70,9 @@ export class ActivationService {
       }
 
       // 4.1 二次校验（按 license 为准）
+      logger.debug(`Checking version (license): appVersion=${request.appVersion}, maxVersion=${license.maxVersion}, maxMajor=${license.maxMajor}`);
       if (!isVersionAllowed({ current: request.appVersion, max: license.maxVersion })) {
+        logger.error(`Version check failed (license): appVersion=${request.appVersion}, maxVersion=${license.maxVersion}, maxMajor=${license.maxMajor}`);
         throw new AppError('VERSION_NOT_ALLOWED', 'App version not allowed by this license', 403, {
           appVersion: request.appVersion,
           maxVersion: license.maxVersion,
@@ -116,7 +120,9 @@ export class ActivationService {
       }
 
       // 2.1 校验版本是否在授权范围内
+      logger.debug(`Checking version for refresh: appVersion=${request.appVersion}, maxVersion=${license.maxVersion}, maxMajor=${license.maxMajor}`);
       if (!isVersionAllowed({ current: request.appVersion, max: license.maxVersion })) {
+        logger.error(`Version check failed for refresh: appVersion=${request.appVersion}, maxVersion=${license.maxVersion}, maxMajor=${license.maxMajor}`);
         throw new AppError('VERSION_NOT_ALLOWED', 'App version not allowed by this license', 403, {
           appVersion: request.appVersion,
           maxVersion: license.maxVersion,

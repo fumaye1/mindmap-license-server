@@ -1,3 +1,5 @@
+import { logger } from './logger.utils';
+
 export type Semver = {
   major: number;
   minor: number;
@@ -29,18 +31,18 @@ export function isVersionAllowed(params: { current: string; max: string }): bool
   const current = parseSemver(params.current);
   const max = parseSemver(params.max);
 
-  console.log('=== Version Debug ===');
-  console.log('Current version:', params.current, 'Parsed:', current);
-  console.log('Max version:', params.max, 'Parsed:', max);
+  logger.debug('=== Version Debug ===');
+  logger.debug('Current version:', params.current, 'Parsed:', current);
+  logger.debug('Max version:', params.max, 'Parsed:', max);
 
   if (!current || !max) {
-    console.log('Version parsing failed!');
+    logger.debug('Version parsing failed!');
     return false;
   }
 
   const result = compareSemver(current, max) <= 0;
-  console.log('Comparison result:', compareSemver(current, max), 'Allowed:', result);
-  console.log('====================');
+  logger.debug('Comparison result:', compareSemver(current, max), 'Allowed:', result);
+  logger.debug('====================');
 
   return result;
 }

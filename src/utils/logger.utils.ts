@@ -24,7 +24,7 @@ const consoleFormat = winston.format.combine(
 );
 
 export const logger = winston.createLogger({
-  level: config.NODE_ENV === 'development' ? 'debug' : 'info',
+  level: 'debug',
   format: logFormat,
   transports: [
     new winston.transports.File({
