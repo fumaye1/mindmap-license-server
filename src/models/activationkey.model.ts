@@ -23,16 +23,16 @@ export class ActivationKey
   extends Model<ActivationKeyAttributes, ActivationKeyCreationAttributes>
   implements ActivationKeyAttributes
 {
-  public id!: number;
-  public key!: string;
-  public licenseId!: string | null;
-  public maxMajor!: number;
-  public maxVersion!: string;
-  public seats!: number;
-  public disabled!: boolean;
-  public expiresAt!: Date | null;
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
+  declare id: number;
+  declare key: string;
+  declare licenseId: string | null;
+  declare maxMajor: number;
+  declare maxVersion: string;
+  declare seats: number;
+  declare disabled: boolean;
+  declare expiresAt: Date | null;
+  declare readonly createdAt: Date;
+  declare readonly updatedAt: Date;
 }
 
 ActivationKey.init(

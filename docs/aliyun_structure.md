@@ -250,6 +250,127 @@ Nginx 配置文件，包含：
 - error.log：错误日志
 - combined.log：综合日志
 
+## 数据库结构
+
+### 数据库概览
+
+数据库名称：`mindmap_license`
+
+### 表结构
+
+#### activation_keys（激活密钥表）
+
+| 字段名 | 类型 | 说明 | 示例值 |
+|--------|------|------|--------|
+| id | INT | 主键 | 1 |
+| key | VARCHAR(20) | 激活密钥（格式：XXXX-XXXX-XXXX-XXXX） | TCE3-6YFP-ZC4C-QDRH |
+| max_major | INT | 允许的最大主版本号 | 0 |
+| max_version | VARCHAR(20) | 允许的最大版本号（格式：major.minor.patch） | 0.2.999 |
+| seats | INT | 允许的设备数量 | 3 |
+| disabled | BOOLEAN | 是否禁用 | 0 |
+| expires_at | DATETIME | 密钥过期时间（NULL 表示永不过期） | 2026-03-16 15:07:23 |
+| license_id | VARCHAR(36) | 关联的许可证ID | NULL |
+| created_at | DATETIME | 创建时间 | 2026-03-09 15:07:23 |
+| updated_at | DATETIME | 更新时间 | 2026-03-09 15:07:23 |
+
+**索引**：
+- PRIMARY KEY (id)
+- UNIQUE KEY (key)
+- INDEX idx_activation_keys_expires_at (expires_at)
+
+**说明**：
+- `max_version` 使用 semver 格式，版本比较规则为 `current <= max` 允许激活
+- `expires_at` 字段用于设置激活密钥的有效期，NULL 表示永不过期
+- `license_id` 在首次激活时创建，之后所有使用该密钥激活的设备共享同一个许可证
+
+#### licenses（许可证表）
+
+| 字段名 | 类型 | 说明 | 示例值 |
+|--------|------|------|--------|
+| license_id | VARCHAR(36) | 许可证ID（UUID） | 550e8400-e29b-41d4-a716-446655440000 |
+| max_major | INT | 允许的最大主版本号 | 0 |
+| max_version | VARCHAR(20) | 允许的最大版本号 | 0.2.999 |
+| seats | INT | 允许的设备数量 | 3 |
+| created_at | DATETIME | 创建时间 | 2026-03-09 15:07:23 |
+| updated_at | DATETIME | 更新时间 | 2026-03-09 15:07:23 |
+
+**索引**：
+- PRIMARY KEY (license_id)
+
+**说明**：
+- 许可证在首次激活时创建，由激活密钥的配置决定
+- 许可证可以被多个设备共享使用，但受 `seats` 限制
+
+#### devices（设备表）
+
+| 字段名 | 类型 | 说明 | 示例值 |
+|--------|------|------|--------|
+| id | INT | 主键 | 1 |
+| license_id | VARCHAR(36) | 关联的许可证ID | 550e8400-e29b-41d4-a716-446655440000 |
+| device_id | VARCHAR(255) | 设备唯一标识 | device-12345 |
+| device_name | VARCHAR(255) | 设备名称 | My Computer |
+| active | BOOLEAN | 是否激活 | 1 |
+| first_seen_at | DATETIME | 首次激活时间 | 2026-03-09 15:07:23 |
+| last_seen_at | DATETIME | 最后激活时间 | 2026-03-09 15:07:23 |
+| created_at | DATETIME | 创建时间 | 2026-03-09 15:07:23 |
+| updated_at | DATETIME | 更新时间 | 2026-03-09 15:07:23 |
+
+**索引**：
+- PRIMARY KEY (id)
+- UNIQUE KEY (license_id, device_id)
+- INDEX idx_devices_license_id (license_id)
+
+**说明**：
+- 每个设备在首次激活时创建记录
+- `active` 标志表示设备是否处于激活状态
+- 同一许可证下的激活设备数量不能超过 `seats` 限制
+
+### 数据库迁移
+
+#### 添加 expires_at 字段
+
+如果数据库中缺少 `expires_at` 字段，执行以下 SQL：
+
+```sql
+USE mindmap_license;
+ALTER TABLE activation_keys
+  ADD COLUMN expires_at DATETIME NULL,
+  ADD INDEX idx_activation_keys_expires_at (expires_at);
+```
+
+#### 查看表结构
+
+```sql
+USE mindmap_license;
+SHOW TABLES;
+DESCRIBE activation_keys;
+DESCRIBE licenses;
+DESCRIBE devices;
+```
+
+#### 查询示例
+
+```sql
+-- 查看所有激活密钥
+SELECT id, \`key\`, max_major, max_version, seats, disabled, expires_at 
+FROM activation_keys;
+
+-- 查看所有许可证
+SELECT license_id, max_major, max_version, seats, created_at 
+FROM licenses;
+
+-- 查看所有设备
+SELECT d.id, d.device_id, d.device_name, d.active, d.first_seen_at, d.last_seen_at, l.max_version
+FROM devices d
+JOIN licenses l ON d.license_id = l.license_id;
+
+-- 查看许可证的设备数量
+SELECT l.license_id, l.max_version, l.seats, COUNT(d.id) as device_count
+FROM licenses l
+LEFT JOIN devices d ON l.license_id = d.license_id AND d.active = 1
+GROUP BY l.license_id;
+```
+
 ## 配置文件说明
 
 ### .env.example

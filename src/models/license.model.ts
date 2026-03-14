@@ -15,14 +15,14 @@ export interface LicenseAttributes {
 export type LicenseCreationAttributes = Optional<LicenseAttributes, 'id' | 'createdAt' | 'updatedAt'>;
 
 export class License extends Model<LicenseAttributes, LicenseCreationAttributes> implements LicenseAttributes {
-  public id!: number;
-  public licenseId!: string;
-  public maxMajor!: number;
-  public maxVersion!: string;
-  public seats!: number;
-  public issuedAt!: Date;
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
+  declare id: number;
+  declare licenseId: string;
+  declare maxMajor: number;
+  declare maxVersion: string;
+  declare seats: number;
+  declare issuedAt: Date;
+  declare readonly createdAt: Date;
+  declare readonly updatedAt: Date;
 }
 
 License.init(

@@ -143,8 +143,58 @@ ALTER TABLE activation_keys
 
 ## 6. 本次代码修复点（已合入）
 
+### 6.1 有效期字段修复
 - 文件：`src/services/license.service.ts`
 - 修复：创建激活码响应中的 `expiresAt`，改为基于本次计算值 `expiresAtDate` 返回，避免受实例字段读取异常影响。
+
+### 6.2 版本检查调试增强
+- 文件：`src/utils/version.utils.ts`
+- 修改：将 `console.log` 替换为 `logger.debug`，添加详细的版本解析和比较日志
+- 文件：`src/utils/logger.utils.ts`
+- 修改：将日志级别从 `config.NODE_ENV === 'development' ? 'debug' : 'info'` 改为 `'debug'`，确保生产环境也能看到调试信息
+- 文件：`src/services/activation.service.ts`
+- 修改：在三个版本检查点添加详细的日志信息（激活密钥检查、许可证二次校验、刷新许可证检查）
+
+#### 版本检查问题排查流程
+
+当遇到 `VERSION_NOT_ALLOWED` 错误时：
+
+1. 查看日志中的版本检查信息：
+   ```bash
+   tail -n 100 logs/combined.log | grep "Version"
+   ```
+
+2. 检查数据库中的激活密钥版本配置：
+   ```bash
+   mysql -u root -p -e "USE mindmap_license; SELECT id, \`key\`, max_major, max_version, seats, disabled FROM activation_keys LIMIT 5;"
+   ```
+
+3. 确认版本号格式：
+   - 应用版本格式：`major.minor.patch`（如 `0.2.5`）
+   - 最大版本格式：`major.minor.patch`（如 `0.2.999`）
+   - 版本比较规则：`current <= max` 允许激活
+
+4. 常见问题：
+   - 版本号格式不正确（如缺少 patch 版本）
+   - maxVersion 设置过小（如 `0.2.0` 而应用版本是 `0.2.5`）
+   - 版本解析失败（日志中会显示 `Version parsing failed!`）
+
+5. 解决方案：
+   - 更新激活密钥的 maxVersion 值
+   - 确保应用版本号格式正确
+   - 检查版本比较逻辑是否正确
+
+#### 快速编译命令
+
+```bash
+npm run build
+```
+
+或使用增量编译：
+
+```bash
+npx tsc --build --incremental
+```
 
 ---
 

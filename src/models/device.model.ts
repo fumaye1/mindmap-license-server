@@ -16,15 +16,15 @@ export interface DeviceAttributes {
 export type DeviceCreationAttributes = Optional<DeviceAttributes, 'id' | 'deviceName' | 'createdAt' | 'updatedAt'>;
 
 export class Device extends Model<DeviceAttributes, DeviceCreationAttributes> implements DeviceAttributes {
-  public id!: number;
-  public licenseId!: string;
-  public deviceId!: string;
-  public deviceName!: string | null;
-  public firstSeenAt!: Date;
-  public lastSeenAt!: Date;
-  public active!: boolean;
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
+  declare id: number;
+  declare licenseId: string;
+  declare deviceId: string;
+  declare deviceName: string | null;
+  declare firstSeenAt: Date;
+  declare lastSeenAt: Date;
+  declare active: boolean;
+  declare readonly createdAt: Date;
+  declare readonly updatedAt: Date;
 }
 
 Device.init(
