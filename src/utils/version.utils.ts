@@ -28,8 +28,21 @@ export function compareSemver(a: Semver, b: Semver): number {
 export function isVersionAllowed(params: { current: string; max: string }): boolean {
   const current = parseSemver(params.current);
   const max = parseSemver(params.max);
-  if (!current || !max) return false;
-  return compareSemver(current, max) <= 0;
+
+  console.log('=== Version Debug ===');
+  console.log('Current version:', params.current, 'Parsed:', current);
+  console.log('Max version:', params.max, 'Parsed:', max);
+
+  if (!current || !max) {
+    console.log('Version parsing failed!');
+    return false;
+  }
+
+  const result = compareSemver(current, max) <= 0;
+  console.log('Comparison result:', compareSemver(current, max), 'Allowed:', result);
+  console.log('====================');
+
+  return result;
 }
 
 export function majorOf(version: string): number | null {

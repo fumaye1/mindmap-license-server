@@ -561,13 +561,47 @@ curl -X POST https://your-domain.com/activate \
 - 无 `INVALID_SIGNATURE` / `VERSION_NOT_ALLOWED` / `SEATS_EXCEEDED` 报错；
 - 刷新插件或重启 Obsidian 后仍保持已激活。
 
-#### 8.4.5 激活失败排查顺序（用户侧）
+#### 8.4.5 激活失败提示、原因与解决（速查表）
 
-1. 检查 URL 是否可达：浏览器访问 `https://your-domain.com/health`。
-2. 检查公钥是否完整粘贴（不要有换行和空格）。
-3. 检查激活码是否输错、是否已禁用、是否已超过座位数。
-4. 检查版本是否在授权范围内（`appVersion <= maxVersion`）。
-5. 管理员查看服务日志：`pm2 logs license-server`。
+> 建议插件端优先展示服务端返回的 `error.code` 与 `error.message`，便于用户和管理员快速定位。
+
+| 用户侧常见提示（示例） | 服务器错误码（`error.code`） | 常见原因 | 解决办法 |
+|---|---|---|---|
+| 激活码无效 / key 不存在 | `ACTIVATION_KEY_NOT_FOUND` | 激活码输错、多空格、用错环境（测试/生产） | 重新复制粘贴激活码；管理员在 `/admin/keys` 核对该 key 是否存在 |
+| 激活码已禁用 | `ACTIVATION_KEY_DISABLED` | 管理员已停用该 key | 管理员重新发新 key，或在后台恢复该 key |
+| 激活码已过期 | `ACTIVATION_KEY_EXPIRED` | 创建 key 时设置了 `validDays`，已超过有效期 | 管理员创建新 key，或改为更长有效期策略 |
+| 当前版本未被授权 | `VERSION_NOT_ALLOWED` | 插件 `appVersion` 高于 key/license 的 `maxVersion` | 降级插件版本，或让管理员发放更高 `maxVersion` 的 key |
+| 设备数已达上限 | `SEATS_EXCEEDED` | 同一 license 已绑定设备数达到 `seats` | 管理员先停用旧设备（`/admin/deactivate-device`）再激活新设备 |
+| 签名校验失败 | `INVALID_SIGNATURE` | 本地许可证被篡改、服务端公私钥不匹配、插件公钥配置错 | 检查插件公钥是否与服务端 `LICENSE_PUBLIC_KEY_B64` 一致；必要时重新激活 |
+| 许可证内容非法 | `INVALID_PAYLOAD` / `INVALID_SIGNED_LICENSE` | 本地缓存的 license 结构损坏或不完整 | 清理插件本地 license 缓存后重新激活 |
+| 请求参数错误 | `INVALID_REQUEST` | 缺字段或格式不合法（如 `appVersion` 非 semver） | 按接口要求补齐字段，确保 `appVersion` 如 `0.2.5` |
+| 跨域被拦截 | `CORS_BLOCKED` | 请求来源不在 `CORS_ORIGINS` 白名单 | 在服务端 `.env` 增加对应来源并 `pm2 restart --update-env` |
+| 地址不存在 / 路由错误 | `NOT_FOUND` | URL 路径写错、反向代理未转发到正确服务 | 核对 base URL、Nginx 配置和接口路径 |
+
+#### 8.4.6 标准排障流程（用户与管理员协作）
+
+1. **先看客户端错误码**：记录插件侧完整错误（至少含 `error.code`）。
+2. **检查连通性**：访问 `https://your-domain.com/health`，确认返回 `200`。
+3. **核对三项输入**：`base URL`、`public key`、`activation key` 是否来自同一环境。
+4. **管理员查服务日志**：
+
+```bash
+pm2 logs license-server --lines 100
+```
+
+5. **必要时刷新环境并重启**：
+
+```bash
+cd /opt/mindmap-license-server
+npx pm2 restart license-server --update-env
+```
+
+6. **数据库侧验证（激活码是否存在/可用）**：
+
+```bash
+curl -X GET "http://127.0.0.1:3000/admin/keys" \
+    -H "Authorization: Bearer <YOUR_ADMIN_TOKEN>"
+```
 
 ## 9. 维护和更新
 
