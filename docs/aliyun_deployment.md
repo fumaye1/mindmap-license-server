@@ -596,11 +596,39 @@ cd /opt/mindmap-license-server
 npx pm2 restart license-server --update-env
 ```
 
+
 6. **数据库侧验证（激活码是否存在/可用）**：
+
+**服务器端 curl 查询所有激活码**：
 
 ```bash
 curl -X GET "http://127.0.0.1:3000/admin/keys" \
     -H "Authorization: Bearer <YOUR_ADMIN_TOKEN>"
+```
+
+**服务器端 curl 查询指定激活码**（如只查某个 key）：
+
+```bash
+curl -X GET "http://127.0.0.1:3000/admin/keys" \
+    -H "Authorization: Bearer <YOUR_ADMIN_TOKEN>" | grep 'ABCD-EFGH-IJKL-MNOP'
+```
+
+**本机 PowerShell 查询所有激活码**：
+
+```powershell
+$token = "<YOUR_ADMIN_TOKEN>"
+$baseUrl = "http://127.0.0.1:3000"
+$resp = Invoke-RestMethod -Uri "$baseUrl/admin/keys" -Headers @{ Authorization = "Bearer $token" }
+$resp | Format-Table -AutoSize
+```
+
+**本机 PowerShell 查询指定激活码**：
+
+```powershell
+$token = "<YOUR_ADMIN_TOKEN>"
+$baseUrl = "http://127.0.0.1:3000"
+$resp = Invoke-RestMethod -Uri "$baseUrl/admin/keys" -Headers @{ Authorization = "Bearer $token" }
+$resp | Where-Object { $_.key -eq "ABCD-EFGH-IJKL-MNOP" } | Format-Table -AutoSize
 ```
 
 ## 9. 维护和更新
